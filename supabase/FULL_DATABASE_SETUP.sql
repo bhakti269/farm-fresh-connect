@@ -34,15 +34,16 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- 5. farmers table (seller registration - no pan_number)
+-- 5. farmers table (seller registration - one farmer per user)
 CREATE TABLE IF NOT EXISTS public.farmers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
   farmer_display_id TEXT NOT NULL UNIQUE DEFAULT ('FRM' || LPAD(NEXTVAL('farmer_id_seq')::TEXT, 6, '0')),
   full_name TEXT NOT NULL,
   address TEXT NOT NULL,
   aadhar_number TEXT NOT NULL,
   contact_number TEXT NOT NULL,
+  gst_number TEXT,
   is_verified BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()

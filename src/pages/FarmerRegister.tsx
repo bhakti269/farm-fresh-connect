@@ -736,9 +736,9 @@ const FarmerRegister = () => {
 
     let farmerProfileData = await supabase
       .from('farmers')
-      .select('id')
+      .select('id, full_name, farmer_display_id, is_verified, address, contact_number, gst_number')
       .eq('user_id', currentUser.id)
-      .single();
+      .maybeSingle();
 
     // When coming from Sell (Business Details), create farmer profile first if not found
     if (!farmerProfileData.data && businessDetailsFromSell.current) {
@@ -781,7 +781,7 @@ const FarmerRegister = () => {
           createError = error;
           break;
         }
-        farmerProfileData = { data: created } as typeof farmerProfileData;
+        farmerProfileData = { data: created as typeof farmerProfileData.data } as typeof farmerProfileData;
         if (created?.farmer_display_id) setFarmerId(created.farmer_display_id);
         await supabase.from('user_roles').upsert({ user_id: currentUser.id, role: 'farmer' });
         break;
@@ -877,15 +877,16 @@ const FarmerRegister = () => {
       return;
     }
 
-    // Success - if came from dashboard "Add Product", go back to dashboard; else take them directly to seller dashboard
+    // Success - pass farmer data so dashboard shows it immediately (avoids DB timing delay)
+    const farmerForDashboard = farmerProfileData.data as { id: string; full_name: string; farmer_display_id: string; is_verified?: boolean; address?: string | null; contact_number?: string | null; gst_number?: string | null } | undefined;
     const addProductOnly = (location.state as { addProductOnly?: boolean } | null)?.addProductOnly;
     if (addProductOnly) {
       toast.success("Product added successfully.");
-      navigate("/farmer-dashboard");
+      navigate("/farmer-dashboard", { state: { fromRegistration: true, farmerData: farmerForDashboard } });
       return;
     }
     toast.success("Registration complete! Taking you to your seller dashboard…");
-    navigate("/farmer-dashboard");
+    navigate("/farmer-dashboard", { state: { fromRegistration: true, farmerData: farmerForDashboard } });
   };
 
   const handleAddAnotherProduct = () => {

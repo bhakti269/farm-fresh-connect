@@ -31,11 +31,14 @@ const Login = () => {
       const fromState = location.state as { from?: string; fromSell?: boolean; businessDetails?: unknown } | null;
       const cameFromFarmerRegister = fromState?.from === "/farmer-register" || fromState?.fromSell;
 
-      // If they came from farmer-register (e.g. to complete seller registration), send them back there with state
-      if (cameFromFarmerRegister) {
-        navigate("/farmer-register", { state: location.state, replace: true });
-        return;
-      }
+      // Check if this user is already a registered farmer (same email = already registered)
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const isAlreadyFarmer = roleData?.role === "farmer";
 
       // If they came from farmer-dashboard (e.g. not logged in), send them there after login
       if (fromState?.from === "/farmer-dashboard") {
@@ -43,13 +46,27 @@ const Login = () => {
         return;
       }
 
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // If they came from farmer-register or Sell: only show registration if NOT already a farmer
+      if (cameFromFarmerRegister) {
+        if (isAlreadyFarmer) {
+          navigate("/farmer-dashboard", { replace: true });
+        } else {
+          navigate("/farmer-register", { state: location.state, replace: true });
+        }
+        return;
+      }
 
-      if (roleData?.role === "farmer") {
+      // If they came from Sell (seller registration)
+      if (fromState?.from === "/sell") {
+        if (isAlreadyFarmer) {
+          navigate("/farmer-dashboard", { replace: true });
+        } else {
+          navigate("/sell", { state: location.state, replace: true });
+        }
+        return;
+      }
+
+      if (isAlreadyFarmer) {
         navigate("/farmer-dashboard", { replace: true });
       } else {
         navigate("/consumer-dashboard", { replace: true });

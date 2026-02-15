@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 const ConsumerRegister = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, signUp, loading: authLoading } = useAuth();
   const [formData, setFormData] = useState({
     fullName: "",
@@ -26,9 +27,14 @@ const ConsumerRegister = () => {
 
   useEffect(() => {
     if (user) {
-      navigate("/consumer-dashboard");
+      const from = (location.state as { from?: string } | null)?.from;
+      if (from === "/sell") {
+        navigate("/sell", { replace: true });
+      } else {
+        navigate("/consumer-dashboard", { replace: true });
+      }
     }
-  }, [user, navigate]);
+  }, [user, navigate, location.state]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { CheckCircle2, FileText, Package, IndianRupee, Building2, MapPin, Mail, User, Info, Phone, LayoutDashboard, Plus } from "lucide-react";
+import { CheckCircle2, FileText, Package, Building2, MapPin, Mail, User, Info, Phone, LayoutDashboard, Plus } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
@@ -100,12 +100,12 @@ const Sell = () => {
               Seller registration progress
             </p>
             <div
-              className="grid grid-cols-2 sm:flex sm:flex-nowrap sm:items-center sm:justify-between gap-4 sm:gap-2 max-w-4xl mx-auto"
+              className="grid grid-cols-3 sm:flex sm:flex-nowrap sm:items-center sm:justify-between gap-4 sm:gap-2 max-w-3xl mx-auto"
               role="progressbar"
               aria-labelledby="registration-progress-label"
               aria-valuenow={2}
               aria-valuemin={1}
-              aria-valuemax={4}
+              aria-valuemax={3}
             >
               <div className="flex items-center gap-2 sm:flex-1 sm:min-w-0">
                 <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center shrink-0">
@@ -117,7 +117,7 @@ const Sell = () => {
                 <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
                   <FileText className="w-4 h-4 text-primary-foreground" />
                 </div>
-                <span className="text-sm font-medium text-foreground whitespace-nowrap">Business Details</span>
+                <span className="text-sm font-medium text-foreground whitespace-nowrap">Personal Details</span>
               </div>
               <div className="flex items-center gap-2 sm:flex-1 sm:min-w-0">
                 <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
@@ -125,26 +125,43 @@ const Sell = () => {
                 </div>
                 <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Product Details</span>
               </div>
-              <div className="flex items-center gap-2 sm:flex-1 sm:min-w-0">
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                  <IndianRupee className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Add GST</span>
-              </div>
             </div>
           </div>
         </div>
 
         <div className="container mx-auto px-4 max-w-2xl">
+          {/* Not logged in – prompt to sign in for seller registration (one login per person) */}
+          {!authLoading && !user && (
+            <Card className="mb-6 border-primary/30 bg-primary/5">
+              <CardContent className="pt-6">
+                <div className="text-center py-4">
+                  <FileText className="w-12 h-12 text-primary mx-auto mb-3" />
+                  <CardTitle className="text-lg mb-2">Sign in to register as a seller</CardTitle>
+                  <CardDescription className="mb-4">
+                    Create or sign in to your account to start seller registration. One account per person.
+                  </CardDescription>
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    <Button asChild>
+                      <Link to="/login" state={{ from: "/sell" }}>Sign In</Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                      <Link to="/consumer-register" state={{ from: "/sell" }}>Create Account</Link>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Already registered seller – show dashboard link */}
-          {!authLoading && isAlreadySeller === true && (
+          {!authLoading && user && isAlreadySeller === true && (
             <Card className="mb-6 border-green-600/30 bg-green-50 dark:bg-green-950/20">
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3 mb-2">
                   <CheckCircle2 className="w-8 h-8 text-green-600 shrink-0" />
                   <div>
                     <CardTitle className="text-lg">You're already a registered seller</CardTitle>
-                    <CardDescription>Go to your seller dashboard to manage products and profile.</CardDescription>
+                    <CardDescription>One login = one seller profile. Go to your seller dashboard to manage products and profile.</CardDescription>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-3 mt-4">
@@ -159,15 +176,15 @@ const Sell = () => {
             </Card>
           )}
 
-          {/* Success banner (only when not already seller) */}
-          {!isAlreadySeller && (
+          {/* Success banner (only when logged in and not already seller) */}
+          {user && !isAlreadySeller && (
           <div className="rounded-lg bg-green-600/10 border border-green-600/20 text-green-800 dark:text-green-200 px-4 py-3 mb-6 text-center text-sm font-medium">
-            Account created successfully
+            Complete registration: add personal details, then product details to go to your seller dashboard.
           </div>
           )}
 
-          {/* Business Details form – hide when already seller */}
-          {!isAlreadySeller && (
+          {/* Business Details form – only when logged in and not already seller */}
+          {user && !isAlreadySeller && (
           <>
           {/* Title and form card */}
           <Card className="border-border shadow-sm">

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, Package, Plus, TrendingUp, Users, Pencil, Trash2, Camera, CheckCircle2, LayoutDashboard, ArrowUp, Handshake, ChevronRight, Briefcase, ShoppingCart, Cloud, Settings, HelpCircle, Search } from "lucide-react";
+import { Loader2, Package, Plus, TrendingUp, Users, Pencil, Trash2, Camera, CheckCircle2, LayoutDashboard, ArrowUp, Handshake, ChevronRight, ShoppingCart, Cloud, Settings, HelpCircle, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface FarmerData {
@@ -22,6 +22,7 @@ interface FarmerData {
   is_verified: boolean;
   address: string | null;
   contact_number: string | null;
+  gst_number: string | null;
 }
 
 interface Product {
@@ -36,10 +37,11 @@ interface Product {
   image_url: string | null;
 }
 
-type DashboardSection = "dashboard" | "paid-services" | "profile" | "lead-manager" | "buyleads" | "products" | "photos-docs" | "buyer-tools" | "settings" | "help";
+type DashboardSection = "dashboard" | "profile" | "buyleads" | "products" | "photos-docs" | "buyer-tools" | "settings" | "help";
 
 const FarmerDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
   const [farmerData, setFarmerData] = useState<FarmerData | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -48,7 +50,6 @@ const FarmerDashboard = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<DashboardSection>("dashboard");
-
   const fetchProducts = async (farmerId: string) => {
     const { data: farmerProducts } = await supabase
       .from("products")
@@ -68,38 +69,46 @@ const FarmerDashboard = () => {
         return;
       }
 
+      // Use farmer data passed from registration (avoids DB timing delay right after signup)
+      const state = location.state as { fromRegistration?: boolean; farmerData?: FarmerData } | null;
+      if (state?.fromRegistration && state?.farmerData) {
+        setFarmerData(state.farmerData);
+        await fetchProducts(state.farmerData.id);
+        setIsLoading(false);
+        return;
+      }
+
       const fetchFarmer = () =>
         supabase
           .from("farmers")
-          .select("id, full_name, farmer_display_id, is_verified, address, contact_number")
+          .select("id, full_name, farmer_display_id, is_verified, address, contact_number, gst_number")
           .eq("user_id", user.id)
           .maybeSingle();
 
       let { data: farmer } = await fetchFarmer();
 
-      // Retry once after a short delay (e.g. right after registration, DB may not be visible yet)
-      if (!farmer) {
-        await new Promise((r) => setTimeout(r, 600));
+      // Retry multiple times (right after registration, DB may have slight delay)
+      for (let i = 0; i < 3 && !farmer; i++) {
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)));
         const result = await fetchFarmer();
         farmer = result.data;
       }
 
       // If still no farmer profile, try to auto-create a minimal one for this logged-in user.
-      // IMPORTANT: even if this fails, we keep the user on the dashboard instead of redirecting away.
       if (!farmer) {
         const metadata: any = (user as any)?.user_metadata || {};
         const insertPayload: Record<string, any> = {
           user_id: user.id,
           full_name: String(metadata.full_name || metadata.name || "Seller"),
           address: "Address not provided",
-          contact_number: metadata.phone || metadata.phone_number || null,
+          contact_number: metadata.phone || metadata.phone_number || "Not provided",
           aadhar_number: "Pending",
         };
 
         const { data: createdFarmer, error: createError } = await supabase
           .from("farmers")
           .insert(insertPayload)
-          .select("id, full_name, farmer_display_id, is_verified, address, contact_number")
+          .select("id, full_name, farmer_display_id, is_verified, address, contact_number, gst_number")
           .single();
 
         if (!createError && createdFarmer) {
@@ -112,15 +121,13 @@ const FarmerDashboard = () => {
         await fetchProducts(farmer.id);
       }
 
-      // Always finish loading; if no farmer profile, dashboard will still render
-      // and simply show placeholder data instead of redirecting back to /sell.
       setIsLoading(false);
     };
 
     if (!authLoading) {
       checkFarmerAccess();
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, location.state]);
 
   const handleEditProduct = (product: Product) => {
     setEditingProduct({ ...product });
@@ -198,8 +205,8 @@ const FarmerDashboard = () => {
     );
   }
 
-  const stepsComplete = [true, true, productsMissingPhoto === 0]; // Basic Details, GST/PAN, Product Photos
-  const stepsAway = stepsComplete.filter(Boolean).length < 3 ? 3 - stepsComplete.filter(Boolean).length : 0;
+  const stepsComplete = [true, productsMissingPhoto === 0]; // Basic Details, Add Product Photos
+  const stepsAway = stepsComplete.filter(Boolean).length < 2 ? 2 - stepsComplete.filter(Boolean).length : 0;
 
   const renderDashboardContent = () => {
     if (activeSection === "dashboard") {
@@ -267,16 +274,19 @@ const FarmerDashboard = () => {
             </div>
           </div>
 
-          {/* Complete your profile section */}
+          {/* Complete your profile – shows what seller is missing from registration */}
           <Card className="mb-6 overflow-hidden border-border shadow-sm">
             <CardContent className="p-6">
+              <p className="text-sm text-muted-foreground mb-4">
+                Complete any missing details from your registration. Add product photos to become a Verified Seller.
+              </p>
               <div className="flex flex-col lg:flex-row gap-8">
                 <div className="flex flex-col sm:flex-row lg:flex-col gap-6 shrink-0">
                   <div className="flex items-center gap-4">
                     <div className="relative w-24 h-24 shrink-0">
                       <svg className="w-24 h-24 -rotate-90" viewBox="0 0 36 36">
                         <path className="text-muted/30" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        <path className="text-orange-500" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" strokeDasharray={`${stepsComplete.filter(Boolean).length * (100 / 3)} 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path className="text-orange-500" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" strokeDasharray={`${stepsComplete.filter(Boolean).length * (100 / 2)} 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         {stepsAway === 0 ? (
@@ -316,16 +326,9 @@ const FarmerDashboard = () => {
                       <span className="text-sm font-medium text-muted-foreground">Basic Details</span>
                     </div>
                     <span className="text-muted-foreground hidden sm:inline">→</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                      </span>
-                      <span className="text-sm font-medium text-muted-foreground">Add GST/PAN</span>
-                    </div>
-                    <span className="text-muted-foreground hidden sm:inline">→</span>
                     <div className={`flex items-center gap-1.5 ${productsMissingPhoto > 0 ? "text-foreground" : ""}`}>
                       <span className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold ${productsMissingPhoto > 0 ? "border-2 border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400" : "bg-green-600 text-white"}`}>
-                        {productsMissingPhoto > 0 ? "3" : <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                        {productsMissingPhoto > 0 ? "2" : <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
                       </span>
                       <span className="text-sm font-medium">Add Product Photos</span>
                     </div>
@@ -486,35 +489,12 @@ const FarmerDashboard = () => {
       );
     }
 
-    if (activeSection === "paid-services") {
-      return (
-        <Card>
-          <CardHeader>
-            <CardTitle>Paid Services</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 border rounded-lg bg-gradient-to-br from-violet-50 to-violet-100 dark:from-violet-950 dark:to-violet-900">
-                <h3 className="font-semibold mb-2">Premium Listing</h3>
-                <p className="text-sm text-muted-foreground mb-3">Get your products featured at the top of search results</p>
-                <Button>Learn More</Button>
-              </div>
-              <div className="p-4 border rounded-lg bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900">
-                <h3 className="font-semibold mb-2">Verified Badge</h3>
-                <p className="text-sm text-muted-foreground mb-3">Show buyers you're a trusted seller</p>
-                <Button>Get Verified</Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-
     if (activeSection === "profile") {
       return (
         <Card>
           <CardHeader>
             <CardTitle>Seller Profile</CardTitle>
+            <CardDescription>Details you added during registration</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -549,22 +529,6 @@ const FarmerDashboard = () => {
       );
     }
 
-    if (activeSection === "lead-manager") {
-      return (
-        <Card>
-          <CardHeader>
-            <CardTitle>Lead Manager</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-8">
-              <TrendingUp className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No leads yet. Complete your profile and add products to start receiving buyer enquiries.</p>
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-
     if (activeSection === "buyleads") {
       return (
         <Card>
@@ -585,7 +549,10 @@ const FarmerDashboard = () => {
       return (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <CardTitle>My Products</CardTitle>
+            <div>
+              <CardTitle>My Products</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Your product listings added during registration and later</p>
+            </div>
             <Button asChild>
               <Link to="/farmer-register" state={{ addProductOnly: true }}>
                 <Plus className="w-4 h-4 mr-2" /> Add Product
@@ -800,19 +767,6 @@ const FarmerDashboard = () => {
               {activeSection === "dashboard" && <ChevronRight className="w-4 h-4 opacity-80" />}
             </button>
             <button
-              onClick={() => setActiveSection("paid-services")}
-              className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-md ${
-                activeSection === "paid-services" 
-                  ? "bg-primary text-primary-foreground font-medium" 
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <span className="flex items-center gap-3">
-                <Briefcase className="w-4 h-4" /> Paid Services
-              </span>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-500/20 text-amber-700 dark:text-amber-400 border-0">Offer</Badge>
-            </button>
-            <button
               onClick={() => setActiveSection("profile")}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md ${
                 activeSection === "profile" 
@@ -821,23 +775,6 @@ const FarmerDashboard = () => {
               }`}
             >
               <Package className="w-4 h-4" /> Profile
-            </button>
-            <button
-              onClick={() => setActiveSection("lead-manager")}
-              className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-md ${
-                activeSection === "lead-manager" 
-                  ? "bg-primary text-primary-foreground font-medium" 
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <span className="flex items-center gap-3">
-                <TrendingUp className="w-4 h-4" /> Lead Manager
-              </span>
-              {productsMissingPhoto > 0 && (
-                <span className="min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">
-                  {productsMissingPhoto}
-                </span>
-              )}
             </button>
             <button
               onClick={() => setActiveSection("buyleads")}
